@@ -72,11 +72,11 @@ typedef struct
 	Token* prev_token;
 	Token* token;
 	size_t pos;
-	char* source;
+	const char* source;
 	size_t source_len;
 } Lexer;
 
-Lexer* lexer_create(char* source)
+Lexer* lexer_create(const char* source)
 {
 	Lexer* lexer = malloc(sizeof(Lexer));
 	lexer->token = NULL;
@@ -97,7 +97,7 @@ char lexer_char(Lexer* lexer)
 	return lexer->source[lexer->pos];
 }
 
-char* substr(char* orig, size_t from, size_t to)
+char* substr(const char* orig, size_t from, size_t to)
 {
 	size_t len = to - from;
 	char* sub = malloc(sizeof(char) * (len + 1));
@@ -353,12 +353,6 @@ Decl decl_type_alias_create(Location location, Ident name, Ident type_name)
 	return decl;
 }
 
-typedef struct
-{
-	Decl* value_decl;
-	Decl* decls;
-} Symbol;
-
 typedef enum
 {
 	STMT_EXPR,
@@ -396,11 +390,6 @@ Stmt stmt_decl_create(Location location, Decl decl)
 	stmt.decl = decl;
 	return stmt;
 }
-
-typedef struct
-{
-	char* id;
-} Type;
 
 typedef struct
 {
@@ -683,7 +672,7 @@ ParseResult parser_parse(Parser* parser, Module* module)
 
 int main(int argc, char** argv)
 {
-	char* source;
+	const char* source;
 	if (argc > 1)
 	{
 		source = argv[1];
@@ -693,7 +682,7 @@ int main(int argc, char** argv)
 		source = "let a = 1;\n"
 				 "let b: number = 2;\n"
 				 "type t = number;\n"
-				 "let c: t = a = b;";
+				 "let c: t = a = b = d;";
 	}
 
 	Parser* parser = parser_create(lexer_create(source));
