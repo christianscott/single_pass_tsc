@@ -21,11 +21,11 @@ typedef enum
 	TOK_COLON,
 	TOK_END_OF_FILE,
 	TOK_UNKNOWN,
-} TokenType;
+} TokenKind;
 
-char *token_type_name(TokenType type)
+char *token_kind_name(TokenKind kind)
 {
-	switch (type)
+	switch (kind)
 	{
 	case TOK_FUNCTION:
 		return "TOK_FUNCTION";
@@ -52,20 +52,20 @@ char *token_type_name(TokenType type)
 	case TOK_UNKNOWN:
 		return "TOK_UNKNOWN";
 	default:
-		return "(unknown token type)";
+		return "(unknown token kind)";
 	}
 }
 
 typedef struct
 {
-	TokenType type;
+	TokenKind kind;
 	char *text;
 } Token;
 
-Token *token_create(TokenType type, char *text)
+Token *token_create(TokenKind kind, char *text)
 {
 	Token *token = malloc(sizeof(Token));
-	token->type = type;
+	token->kind = kind;
 	token->text = text;
 	return token;
 }
@@ -139,9 +139,11 @@ void lexer_set_token(Lexer *lexer, Token *token)
 	lexer->token = token;
 }
 
+#define STRNCMP(s1, s2) strncmp(s1, s2, sizeof(s2) - 1) == 0
+
 void lexer_scan(Lexer *lexer)
 {
-	if (lexer->token != NULL && lexer->token->type == TOK_END_OF_FILE)
+	if (lexer->token != NULL && lexer->token->kind == TOK_END_OF_FILE)
 	{
 		return;
 	}
@@ -181,19 +183,19 @@ void lexer_scan(Lexer *lexer)
 		TokenKind kind;
 		if (STRNCMP(text, "function"))
 		{
-			type = TOK_FUNCTION;
+			kind = TOK_FUNCTION;
 		}
 		else if (STRNCMP(text, "let"))
 		{
-			type = TOK_LET;
+			kind = TOK_LET;
 		}
 		else if (STRNCMP(text, "kind"))
 		{
-			type = TOK_TYPE;
+			kind = TOK_TYPE;
 		}
 		else if (STRNCMP(text, "return"))
 		{
-			type = TOK_RETURN;
+			kind = TOK_RETURN;
 		}
 		else if ((STRNCMP(text, "true") || STRNCMP(text, "false")))
 		{
@@ -201,9 +203,9 @@ void lexer_scan(Lexer *lexer)
 		}
 		else
 		{
-			type = TOK_IDENT;
+			kind = TOK_IDENT;
 		}
-		lexer_set_token(lexer, token_create(type, text));
+		lexer_set_token(lexer, token_create(kind, text));
 		return;
 	}
 
@@ -239,7 +241,7 @@ typedef enum
 	EXPR_NUM,
 	EXPR_BOOL,
 	EXPR_ASSIGNMENT,
-} ExprType;
+} ExprKind;
 
 typedef struct
 {
@@ -261,7 +263,7 @@ typedef struct
 
 struct Expr_
 {
-	ExprType type;
+	ExprKind kind;
 	Location location;
 
 	union
@@ -280,7 +282,7 @@ struct Expr_
 Expr expr_ident_create(Location location, const char *text)
 {
 	Expr expr;
-	expr.type = EXPR_IDENT;
+	expr.kind = EXPR_IDENT;
 	expr.location = location;
 	Ident ident = { .text = text };
 	expr.ident = ident;
@@ -290,7 +292,7 @@ Expr expr_ident_create(Location location, const char *text)
 Expr expr_num_create(Location location, double value)
 {
 	Expr expr;
-	expr.type = EXPR_NUM;
+	expr.kind = EXPR_NUM;
 	expr.location = location;
 	Number num = { .value = value };
 	expr.num = num;
@@ -301,7 +303,7 @@ Expr expr_assignment_create(Location location, Ident name, Expr *value)
 {
 	Assignment assignment = { .expr = value, .name = name };
 	Expr expr = {
-		.type = EXPR_ASSIGNMENT,
+		.kind = EXPR_ASSIGNMENT,
 		.location = location,
 		.assignment = assignment,
 	};
@@ -311,7 +313,7 @@ Expr expr_assignment_create(Location location, Ident name, Expr *value)
 Expr expr_bool_create(Location location, bool value)
 {
 	Expr expr = {
-		.type = EXPR_BOOL,
+		.kind = EXPR_BOOL,
 		.location = location,
 		.boolean = value,
 	};
@@ -324,7 +326,7 @@ typedef enum
 {
 	DECL_LET,
 	DECL_TYPE_ALIAS,
-} DeclType;
+} DeclKind;
 
 typedef struct
 {
@@ -341,7 +343,7 @@ typedef struct
 
 typedef struct
 {
-	DeclType type;
+	DeclKind kind;
 	Location location;
 
 	union
@@ -356,7 +358,7 @@ typedef struct
 Decl decl_let_create(Location location, Ident name, Ident *type_name, Expr init)
 {
 	Decl decl;
-	decl.type = DECL_LET;
+	decl.kind = DECL_LET;
 	decl.location = location;
 
 	Let let = { .name = name, .type_name = type_name, .init = init };
@@ -368,7 +370,7 @@ Decl decl_let_create(Location location, Ident name, Ident *type_name, Expr init)
 Decl decl_type_alias_create(Location location, Ident name, Ident type_name)
 {
 	Decl decl;
-	decl.type = DECL_TYPE_ALIAS;
+	decl.kind = DECL_TYPE_ALIAS;
 	decl.location = location;
 	TypeAlias type_alias = { .name = name, .type_name = type_name };
 	decl.type_alias = type_alias;
@@ -379,11 +381,11 @@ typedef enum
 {
 	STMT_EXPR,
 	STMT_DECL,
-} StmtType;
+} StmtKind;
 
 typedef struct
 {
-	StmtType type;
+	StmtKind kind;
 	Location location;
 
 	union
@@ -398,7 +400,7 @@ typedef struct
 Stmt stmt_expr_create(Location location, Expr expr)
 {
 	Stmt stmt;
-	stmt.type = STMT_EXPR;
+	stmt.kind = STMT_EXPR;
 	stmt.location = location;
 	stmt.expr = expr;
 	return stmt;
@@ -407,7 +409,7 @@ Stmt stmt_expr_create(Location location, Expr expr)
 Stmt stmt_decl_create(Location location, Decl decl)
 {
 	Stmt stmt;
-	stmt.type = STMT_DECL;
+	stmt.kind = STMT_DECL;
 	stmt.location = location;
 	stmt.decl = decl;
 	return stmt;
@@ -506,11 +508,11 @@ bool hm_has(Hashmap *hm, const char *key)
 	return hm_get(hm, key, &dummy);
 }
 
-typedef struct Scope_
+struct Scope_
 {
-	struct Scope_ *parent;
+	Scope *parent;
 	Hashmap bindings;
-} Scope;
+};
 
 void scope_init(Scope *scope, Scope *parent)
 {
@@ -575,6 +577,10 @@ char *parse_result_name(ParseResult res)
 		return "PARSE_RESULT_UNEXPECTED_TOK";
 	case PARSE_RESULT_INVALID_NUMERIC_LITERAL:
 		return "PARSE_RESULT_INVALID_NUMERIC_LITERAL";
+	case PARSE_RESULT_CANNOT_REDECLARE:
+		return "PARSE_RESULT_CANNOT_REDECLARE";
+	case PARSE_RESULT_UNDECLARED:
+		return "PARSE_RESULT_UNDECLARED";
 	default:
 		return "(unknown)";
 	}
@@ -637,9 +643,9 @@ void parser_print_error_context(Parser *parser)
         fprintf(stderr, __VA_ARGS__); \
     } while (0)
 
-bool parser_try_parse_token(Parser *parser, TokenType type)
+bool parser_try_parse_token(Parser *parser, TokenKind kind)
 {
-	bool ok = parser->lexer->token != NULL && parser->lexer->token->type == type;
+	bool ok = parser->lexer->token != NULL && parser->lexer->token->kind == kind;
 	if (ok)
 	{
 		lexer_scan(parser->lexer);
@@ -647,14 +653,14 @@ bool parser_try_parse_token(Parser *parser, TokenType type)
 	return ok;
 }
 
-ParseResult parser_expect_token(Parser *parser, TokenType type)
+ParseResult parser_expect_token(Parser *parser, TokenKind kind)
 {
-	bool ok = parser_try_parse_token(parser, type);
+	bool ok = parser_try_parse_token(parser, kind);
 	if (!ok)
 	{
-		PARSER_ERROR("expected a token of type %s, got %s\n",
-			token_type_name(type),
-			token_type_name(parser->lexer->token->type));
+		PARSER_ERROR("expected a token of kind %s, got %s\n",
+			token_kind_name(kind),
+			token_kind_name(parser->lexer->token->kind));
 		return PARSE_RESULT_UNEXPECTED_TOK;
 	}
 	return PARSE_RESULT_OK;
@@ -690,7 +696,7 @@ ParseResult parse_identifier_or_literal(Parser *parser, Expr *expr)
 		return PARSE_RESULT_OK;
 	}
 
-	PARSER_ERROR("expected identifier or a literal but got %s\n", token_type_name(parser->lexer->token->kind));
+	PARSER_ERROR("expected identifier or a literal but got %s\n", token_kind_name(parser->lexer->token->kind));
 	return PARSE_RESULT_UNEXPECTED_TOK;
 }
 
@@ -701,20 +707,17 @@ ParseResult parse_expression(Parser *parser, Expr *expr)
 
 	TRY_PARSE(parse_identifier_or_literal(parser, expr));
 
-	if (expr->type == EXPR_IDENT)
+	if (expr->kind == EXPR_IDENT && !scope_is_declared(parser->scope, expr->ident.text))
 	{
-		if (!scope_is_declared(parser->scope, expr->ident.text))
-		{
-			PARSER_ERROR("cannot reference '%s' before declaration\n", expr->ident.text);
-			return PARSE_RESULT_UNDECLARED;
-		}
+		PARSER_ERROR("cannot reference '%s' before declaration\n", expr->ident.text);
+		return PARSE_RESULT_UNDECLARED;
+	}
 
-		if (parser_try_parse_token(parser, TOK_EQ))
-		{
-			Expr *value = malloc(sizeof(Expr));
-			TRY_PARSE(parse_expression(parser, value));
-			*expr = expr_assignment_create(location, expr->ident, value);
-		}
+	if (expr->kind == EXPR_IDENT && parser_try_parse_token(parser, TOK_EQ))
+	{
+		Expr *value = malloc(sizeof(Expr));
+		TRY_PARSE(parse_expression(parser, value));
+		*expr = expr_assignment_create(location, expr->ident, value);
 	}
 
 	return PARSE_RESULT_OK;
@@ -724,7 +727,7 @@ ParseResult parse_identifier(Parser *parser, Ident *ident)
 {
 	Expr expr;
 	TRY_PARSE(parse_identifier_or_literal(parser, &expr));
-	if (expr.type == EXPR_IDENT)
+	if (expr.kind == EXPR_IDENT)
 	{
 		*ident = expr.ident;
 		return PARSE_RESULT_OK;
@@ -814,12 +817,12 @@ void parser_synchronize(Parser *parser)
 	while (!lexer_has_more_chars(parser->lexer))
 	{
 		Token *prev_token = parser->lexer->prev_token;
-		if (prev_token != NULL && prev_token->type == TOK_SEMICOLON)
+		if (prev_token != NULL && prev_token->kind == TOK_SEMICOLON)
 		{
 			return;
 		}
 
-		switch (parser->lexer->token->type)
+		switch (parser->lexer->token->kind)
 		{
 		case TOK_LET:
 		case TOK_FUNCTION:
