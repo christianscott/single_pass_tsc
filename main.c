@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "./hashmap.h"
 #include "./vendor/stretchy_buffer.h"
 
 typedef enum
@@ -402,7 +401,7 @@ Stmt stmt_decl_create(Location location, Decl decl)
 typedef struct
 {
 	bool in_use;
-	const char* key;
+	const char *key;
 	Decl val;
 } HashmapEntry;
 
@@ -410,17 +409,17 @@ typedef struct
 {
 	int cap;
 	int size;
-	HashmapEntry* entries;
+	HashmapEntry *entries;
 } Hashmap;
 
-void hm_init(Hashmap* hm)
+void hm_init(Hashmap *hm)
 {
 	hm->cap = 2;
 	hm->size = 0;
 	hm->entries = calloc(hm->cap, sizeof(HashmapEntry));
 }
 
-void hm_ensure(Hashmap* hm, int min_cap)
+void hm_ensure(Hashmap *hm, int min_cap)
 {
 	if (hm->cap >= min_cap)
 	{
@@ -436,7 +435,7 @@ void hm_ensure(Hashmap* hm, int min_cap)
 	}
 }
 
-void hm_add(Hashmap* hm, const char* key, Decl val)
+void hm_add(Hashmap *hm, const char *key, Decl val)
 {
 	hm_ensure(hm, ++hm->size);
 
@@ -459,7 +458,7 @@ void hm_add(Hashmap* hm, const char* key, Decl val)
 	UNREACHABLE("could not insert key '%s' into hashmap\n", key);
 }
 
-bool hm_get(Hashmap* hm, const char* key, Decl* result)
+bool hm_get(Hashmap *hm, const char *key, Decl *result)
 {
 	for (int i = 0; i < hm->cap; i++)
 	{
@@ -479,7 +478,7 @@ bool hm_get(Hashmap* hm, const char* key, Decl* result)
 	return false;
 }
 
-bool hm_has(Hashmap* hm, const char* key)
+bool hm_has(Hashmap *hm, const char *key)
 {
 	Decl dummy;
 	return hm_get(hm, key, &dummy);
@@ -730,6 +729,12 @@ ParseResult parse_stmt(Parser *parser, Stmt *stmt, Scope *scope)
 		Ident name;
 		TRY_PARSE(parse_identifier(parser, &name));
 
+		if (scope_is_declared(scope, name.text))
+		{
+			PARSER_ERROR("cannot redeclare symbol '%s'\n", name.text);
+			return PARSE_RESULT_CANNOT_REDECLARE;
+		}
+
 		TRY_PARSE(parser_expect_token(parser, TOK_EQ));
 
 		Ident type_name;
@@ -737,6 +742,8 @@ ParseResult parse_stmt(Parser *parser, Stmt *stmt, Scope *scope)
 
 		Decl decl = decl_type_alias_create(location, name, type_name);
 		*stmt = stmt_decl_create(location, decl);
+
+		scope_declare(scope, name.text, decl);
 	}
 	else
 	{
@@ -826,6 +833,7 @@ int main(int argc, char **argv)
 	{
 		source = "let a = 1;\n"
 			 "let a: number = 2;\n"
+			 "type t = number;\n"
 			 "type t = number;\n"
 			 "let c: t = a = b = d;";
 	}
