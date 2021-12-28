@@ -1,3 +1,5 @@
+#pragma once
+
 // stretchy buffer // init: NULL // free: sbfree() // push_back: sbpush() // size: sbcount() //
 #define sbfree(a)         ((a) ? free(stb__sbraw(a)),0 : 0)
 #define sbpush(a,v)       (stb__sbmaybegrow(a,1), (a)[stb__sbn(a)++] = (v))
