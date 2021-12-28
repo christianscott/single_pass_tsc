@@ -100,7 +100,7 @@ char lexer_char(Lexer *lexer)
 char *substr(const char *orig, size_t from, size_t to)
 {
 	size_t len = to - from;
-	char *sub = malloc(sizeof(char) * (len + 1));
+	char *sub = calloc(len + 1, sizeof(char));
 	strncpy(sub, orig + from, len);
 	sub[len] = '\0';
 	return sub;
@@ -592,7 +592,7 @@ void parser_print_error_context(Parser *parser)
 	fprintf(stderr, "%s", current_line);
 
 	size_t padding_size = pos - line_start - 1;
-	char *padding = malloc(sizeof(char) * padding_size);
+	char *padding = calloc(padding_size, sizeof(char));
 	for (size_t i = 0; i < padding_size; i++)
 	{
 		padding[i] = ' ';
