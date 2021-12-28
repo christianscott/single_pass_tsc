@@ -15,6 +15,7 @@ typedef enum
 	TOK_RETURN,
 	TOK_EQ,
 	TOK_NUMBER,
+	TOK_BOOL,
 	TOK_IDENT,
 	TOK_SEMICOLON,
 	TOK_COLON,
@@ -38,6 +39,8 @@ char *token_type_name(TokenType type)
 		return "TOK_EQ";
 	case TOK_NUMBER:
 		return "TOK_NUMBER";
+	case TOK_BOOL:
+		return "TOK_BOOL";
 	case TOK_IDENT:
 		return "TOK_IDENT";
 	case TOK_SEMICOLON:
@@ -175,22 +178,26 @@ void lexer_scan(Lexer *lexer)
 		}
 
 		char *text = substr(lexer->source, start, lexer->pos);
-		TokenType type;
-		if (strcmp(text, "function") == 0)
+		TokenKind kind;
+		if (STRNCMP(text, "function"))
 		{
 			type = TOK_FUNCTION;
 		}
-		else if (strcmp(text, "let") == 0)
+		else if (STRNCMP(text, "let"))
 		{
 			type = TOK_LET;
 		}
-		else if (strcmp(text, "type") == 0)
+		else if (STRNCMP(text, "kind"))
 		{
 			type = TOK_TYPE;
 		}
-		else if (strcmp(text, "return") == 0)
+		else if (STRNCMP(text, "return"))
 		{
 			type = TOK_RETURN;
+		}
+		else if ((STRNCMP(text, "true") || STRNCMP(text, "false")))
+		{
+			kind = TOK_BOOL;
 		}
 		else
 		{
@@ -230,6 +237,7 @@ typedef enum
 {
 	EXPR_IDENT,
 	EXPR_NUM,
+	EXPR_BOOL,
 	EXPR_ASSIGNMENT,
 } ExprType;
 
@@ -262,6 +270,8 @@ struct Expr_
 		Ident ident;
 		// EXPR_NUM
 		Number num;
+		// EXPR_BOOL
+		bool boolean;
 		// EXPR_ASSIGNMENT
 		Assignment assignment;
 	};
@@ -297,6 +307,18 @@ Expr expr_assignment_create(Location location, Ident name, Expr *value)
 	};
 	return expr;
 }
+
+Expr expr_bool_create(Location location, bool value)
+{
+	Expr expr = {
+		.type = EXPR_BOOL,
+		.location = location,
+		.boolean = value,
+	};
+	return expr;
+}
+
+typedef struct Scope_ Scope;
 
 typedef enum
 {
@@ -661,7 +683,14 @@ ParseResult parse_identifier_or_literal(Parser *parser, Expr *expr)
 		return PARSE_RESULT_OK;
 	}
 
-	PARSER_ERROR("expected identifier or a literal but got %s\n", token_type_name(parser->lexer->token->type));
+	if (parser_try_parse_token(parser, TOK_BOOL))
+	{
+		bool value = STRNCMP(parser->lexer->prev_token->text, "true");
+		*expr = expr_bool_create(location, value);
+		return PARSE_RESULT_OK;
+	}
+
+	PARSER_ERROR("expected identifier or a literal but got %s\n", token_type_name(parser->lexer->token->kind));
 	return PARSE_RESULT_UNEXPECTED_TOK;
 }
 
@@ -855,7 +884,7 @@ int main(int argc, char **argv)
 		source = "let a = 1;\n"
 			 "let c = 2;\n"
 			 "type t = number;\n"
-			 "let b: t = c = 1;\n";
+			 "let b: t = c = false;\n";
 	}
 
 	Parser *parser = parser_create(lexer_create(source));
