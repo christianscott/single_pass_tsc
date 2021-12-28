@@ -530,6 +530,7 @@ typedef struct
 typedef struct
 {
 	Lexer *lexer;
+	Scope *scope;
 	bool has_errors;
 } Parser;
 
@@ -539,6 +540,7 @@ typedef enum
 	PARSE_RESULT_UNEXPECTED_TOK,
 	PARSE_RESULT_INVALID_NUMERIC_LITERAL,
 	PARSE_RESULT_CANNOT_REDECLARE,
+	PARSE_RESULT_UNDECLARED,
 } ParseResult;
 
 char *parse_result_name(ParseResult res)
@@ -567,6 +569,10 @@ Parser *parser_create(Lexer *lexer)
 	Parser *parser = malloc(sizeof(Parser));
 	parser->lexer = lexer;
 	parser->has_errors = false;
+
+	parser->scope = malloc(sizeof(Scope));
+	scope_init(parser->scope, NULL);
+
 	return parser;
 }
 
@@ -666,11 +672,20 @@ ParseResult parse_expression(Parser *parser, Expr *expr)
 
 	TRY_PARSE(parse_identifier_or_literal(parser, expr));
 
-	if (expr->type == EXPR_IDENT && parser_try_parse_token(parser, TOK_EQ))
+	if (expr->type == EXPR_IDENT)
 	{
-		Expr *value = malloc(sizeof(Expr));
-		TRY_PARSE(parse_expression(parser, value));
-		*expr = expr_assignment_create(location, expr->ident, value);
+		if (!scope_is_declared(parser->scope, expr->ident.text))
+		{
+			PARSER_ERROR("cannot reference '%s' before declaration\n", expr->ident.text);
+			return PARSE_RESULT_UNDECLARED;
+		}
+
+		if (parser_try_parse_token(parser, TOK_EQ))
+		{
+			Expr *value = malloc(sizeof(Expr));
+			TRY_PARSE(parse_expression(parser, value));
+			*expr = expr_assignment_create(location, expr->ident, value);
+		}
 	}
 
 	return PARSE_RESULT_OK;
@@ -690,7 +705,7 @@ ParseResult parse_identifier(Parser *parser, Ident *ident)
 	return PARSE_RESULT_UNEXPECTED_TOK;
 }
 
-ParseResult parse_stmt(Parser *parser, Stmt *stmt, Scope *scope)
+ParseResult parse_stmt(Parser *parser, Stmt *stmt)
 {
 	size_t pos = parser->lexer->pos;
 	Location location = { .pos = pos };
@@ -701,7 +716,7 @@ ParseResult parse_stmt(Parser *parser, Stmt *stmt, Scope *scope)
 		Ident name;
 		TRY_PARSE(parse_identifier(parser, &name));
 
-		if (scope_is_declared(scope, name.text))
+		if (scope_is_declared(parser->scope, name.text))
 		{
 			PARSER_ERROR("cannot redeclare symbol '%s'\n", name.text);
 			return PARSE_RESULT_CANNOT_REDECLARE;
@@ -712,6 +727,12 @@ ParseResult parse_stmt(Parser *parser, Stmt *stmt, Scope *scope)
 		{
 			type_name = malloc(sizeof(Ident));
 			TRY_PARSE(parse_identifier(parser, type_name));
+
+			if (!scope_is_declared(parser->scope, type_name->text))
+			{
+				PARSER_ERROR("cannot reference type '%s' before declaration\n", type_name->text);
+				return PARSE_RESULT_UNDECLARED;
+			}
 		}
 
 		TRY_PARSE(parser_expect_token(parser, TOK_EQ));
@@ -721,7 +742,7 @@ ParseResult parse_stmt(Parser *parser, Stmt *stmt, Scope *scope)
 		Decl decl = decl_let_create(location, name, type_name, init);
 		*stmt = stmt_decl_create(location, decl);
 
-		scope_declare(scope, name.text, decl);
+		scope_declare(parser->scope, name.text, decl);
 	}
 	else if (parser_try_parse_token(parser, TOK_TYPE))
 	{
@@ -729,7 +750,7 @@ ParseResult parse_stmt(Parser *parser, Stmt *stmt, Scope *scope)
 		Ident name;
 		TRY_PARSE(parse_identifier(parser, &name));
 
-		if (scope_is_declared(scope, name.text))
+		if (scope_is_declared(parser->scope, name.text))
 		{
 			PARSER_ERROR("cannot redeclare symbol '%s'\n", name.text);
 			return PARSE_RESULT_CANNOT_REDECLARE;
@@ -743,7 +764,7 @@ ParseResult parse_stmt(Parser *parser, Stmt *stmt, Scope *scope)
 		Decl decl = decl_type_alias_create(location, name, type_name);
 		*stmt = stmt_decl_create(location, decl);
 
-		scope_declare(scope, name.text, decl);
+		scope_declare(parser->scope, name.text, decl);
 	}
 	else
 	{
@@ -800,7 +821,7 @@ ParseResult parser_parse_module(Parser *parser, Module *mod)
 	while (true)
 	{
 		Stmt stmt;
-		res = parse_stmt(parser, &stmt, &scope);
+		res = parse_stmt(parser, &stmt);
 		if (res != PARSE_RESULT_OK)
 		{
 			parser_synchronize(parser);
@@ -832,10 +853,9 @@ int main(int argc, char **argv)
 	else
 	{
 		source = "let a = 1;\n"
-			 "let a: number = 2;\n"
+			 "let c = 2;\n"
 			 "type t = number;\n"
-			 "type t = number;\n"
-			 "let c: t = a = b = d;";
+			 "let b: t = c = 1;\n";
 	}
 
 	Parser *parser = parser_create(lexer_create(source));
