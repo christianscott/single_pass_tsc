@@ -205,18 +205,18 @@ void lexer_scan(Lexer *lexer)
 	switch (lexer->source[lexer->pos - 1])
 	{
 	case '=':
-		lexer->token = token_create(TOK_EQ, "=");
+		lexer_set_token(lexer, token_create(TOK_EQ, "="));
 		break;
 	case ';':
-		lexer->token = token_create(TOK_SEMICOLON, ";");
+		lexer_set_token(lexer, token_create(TOK_SEMICOLON, ";"));
 		break;
 	case ':':
-		lexer->token = token_create(TOK_COLON, ":");
+		lexer_set_token(lexer, token_create(TOK_COLON, ":"));
 		break;
 	default:
 	{
 		char *text = substr(lexer->source, start, lexer->pos);
-		lexer->token = token_create(TOK_UNKNOWN, text);
+		lexer_set_token(lexer, token_create(TOK_UNKNOWN, text));
 		break;
 	}
 	}
@@ -392,6 +392,137 @@ Stmt stmt_decl_create(Location location, Decl decl)
 	return stmt;
 }
 
+#define UNREACHABLE(...)                                                                                               \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        fprintf(stderr, "unreachable: " __VA_ARGS__);                                                                  \
+        exit(1);                                                                                                       \
+    } while (0)
+
+typedef struct
+{
+	bool in_use;
+	const char* key;
+	Decl val;
+} HashmapEntry;
+
+typedef struct
+{
+	int cap;
+	int size;
+	HashmapEntry* entries;
+} Hashmap;
+
+void hm_init(Hashmap* hm)
+{
+	hm->cap = 2;
+	hm->size = 0;
+	hm->entries = calloc(hm->cap, sizeof(HashmapEntry));
+}
+
+void hm_ensure(Hashmap* hm, int min_cap)
+{
+	if (hm->cap >= min_cap)
+	{
+		return;
+	}
+
+	int prev_cap = hm->cap;
+	hm->cap = prev_cap * 2;
+	hm->entries = realloc(hm->entries, sizeof(HashmapEntry) * hm->cap);
+	for (int i = prev_cap; i < hm->cap; i++)
+	{
+		hm->entries[i] = (const HashmapEntry){ 0 };
+	}
+}
+
+void hm_add(Hashmap* hm, const char* key, Decl val)
+{
+	hm_ensure(hm, ++hm->size);
+
+	for (int i = 0; i < hm->cap; i++)
+	{
+		if (!hm->entries[i].in_use)
+		{
+			HashmapEntry entry = { .in_use = true, .key = key, .val = val };
+			hm->entries[i] = entry;
+			return;
+		}
+
+		if (strcmp(hm->entries[i].key, key) == 0)
+		{
+			hm->entries[i].val = val;
+			return;
+		}
+	}
+
+	UNREACHABLE("could not insert key '%s' into hashmap\n", key);
+}
+
+bool hm_get(Hashmap* hm, const char* key, Decl* result)
+{
+	for (int i = 0; i < hm->cap; i++)
+	{
+		HashmapEntry entry = hm->entries[i];
+		if (!entry.in_use)
+		{
+			continue;
+		}
+
+		if (strcmp(entry.key, key) == 0)
+		{
+			*result = entry.val;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool hm_has(Hashmap* hm, const char* key)
+{
+	Decl dummy;
+	return hm_get(hm, key, &dummy);
+}
+
+typedef struct Scope_
+{
+	struct Scope_ *parent;
+	Hashmap bindings;
+} Scope;
+
+void scope_init(Scope *scope, Scope *parent)
+{
+	scope->parent = parent;
+	hm_init(&scope->bindings);
+}
+
+bool scope_get_value(Scope *s, const char *name, Decl *decl)
+{
+	if (hm_get(&s->bindings, name, decl))
+	{
+		return true;
+	}
+
+	if (s->parent != NULL)
+	{
+		return scope_get_value(s->parent, name, decl);
+	}
+
+	return false;
+}
+
+void scope_declare(Scope *s, const char *name, Decl decl)
+{
+	hm_add(&s->bindings, name, decl);
+}
+
+bool scope_is_declared(Scope *s, const char *name)
+{
+	Decl dummy;
+	return scope_get_value(s, name, &dummy);
+}
+
 typedef struct
 {
 	Stmt *statements;
@@ -408,6 +539,7 @@ typedef enum
 	PARSE_RESULT_OK,
 	PARSE_RESULT_UNEXPECTED_TOK,
 	PARSE_RESULT_INVALID_NUMERIC_LITERAL,
+	PARSE_RESULT_CANNOT_REDECLARE,
 } ParseResult;
 
 char *parse_result_name(ParseResult res)
@@ -507,7 +639,7 @@ ParseResult parse_identifier_or_literal(Parser *parser, Expr *expr)
 	Location location = { .pos = pos };
 	if (parser_try_parse_token(parser, TOK_IDENT))
 	{
-		*expr = expr_ident_create(location, parser->lexer->token->text);
+		*expr = expr_ident_create(location, parser->lexer->prev_token->text);
 		return PARSE_RESULT_OK;
 	}
 
@@ -559,7 +691,7 @@ ParseResult parse_identifier(Parser *parser, Ident *ident)
 	return PARSE_RESULT_UNEXPECTED_TOK;
 }
 
-ParseResult parse_stmt(Parser *parser, Stmt *stmt)
+ParseResult parse_stmt(Parser *parser, Stmt *stmt, Scope *scope)
 {
 	size_t pos = parser->lexer->pos;
 	Location location = { .pos = pos };
@@ -569,6 +701,12 @@ ParseResult parse_stmt(Parser *parser, Stmt *stmt)
 		// let $name: $type_name = $expr;
 		Ident name;
 		TRY_PARSE(parse_identifier(parser, &name));
+
+		if (scope_is_declared(scope, name.text))
+		{
+			PARSER_ERROR("cannot redeclare symbol '%s'\n", name.text);
+			return PARSE_RESULT_CANNOT_REDECLARE;
+		}
 
 		Ident *type_name = NULL;
 		if (parser_try_parse_token(parser, TOK_COLON))
@@ -583,6 +721,8 @@ ParseResult parse_stmt(Parser *parser, Stmt *stmt)
 		TRY_PARSE(parse_expression(parser, &init));
 		Decl decl = decl_let_create(location, name, type_name, init);
 		*stmt = stmt_decl_create(location, decl);
+
+		scope_declare(scope, name.text, decl);
 	}
 	else if (parser_try_parse_token(parser, TOK_TYPE))
 	{
@@ -645,11 +785,15 @@ ParseResult parser_parse_module(Parser *parser, Module *mod)
 		return PARSE_RESULT_OK;
 	}
 
+	// module-level scope
+	Scope scope;
+	scope_init(&scope, NULL);
+
 	ParseResult res;
 	while (true)
 	{
 		Stmt stmt;
-		res = parse_stmt(parser, &stmt);
+		res = parse_stmt(parser, &stmt, &scope);
 		if (res != PARSE_RESULT_OK)
 		{
 			parser_synchronize(parser);
@@ -681,7 +825,7 @@ int main(int argc, char **argv)
 	else
 	{
 		source = "let a = 1;\n"
-			 "let b: number = 2;\n"
+			 "let a: number = 2;\n"
 			 "type t = number;\n"
 			 "let c: t = a = b = d;";
 	}
