@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "./hashmap.h"
 #include "./vendor/stretchy_buffer.h"
 
 typedef enum
@@ -22,7 +23,7 @@ typedef enum
 	TOK_UNKNOWN,
 } TokenType;
 
-char* token_type_name(TokenType type)
+char *token_type_name(TokenType type)
 {
 	switch (type)
 	{
@@ -56,12 +57,12 @@ char* token_type_name(TokenType type)
 typedef struct
 {
 	TokenType type;
-	char* text;
+	char *text;
 } Token;
 
-Token* token_create(TokenType type, char* text)
+Token *token_create(TokenType type, char *text)
 {
-	Token* token = malloc(sizeof(Token));
+	Token *token = malloc(sizeof(Token));
 	token->type = type;
 	token->text = text;
 	return token;
@@ -69,16 +70,16 @@ Token* token_create(TokenType type, char* text)
 
 typedef struct
 {
-	Token* prev_token;
-	Token* token;
+	Token *prev_token;
+	Token *token;
 	size_t pos;
-	const char* source;
+	const char *source;
 	size_t source_len;
 } Lexer;
 
-Lexer* lexer_create(const char* source)
+Lexer *lexer_create(const char *source)
 {
-	Lexer* lexer = malloc(sizeof(Lexer));
+	Lexer *lexer = malloc(sizeof(Lexer));
 	lexer->token = NULL;
 	lexer->prev_token = NULL;
 	lexer->pos = 0;
@@ -87,20 +88,20 @@ Lexer* lexer_create(const char* source)
 	return lexer;
 }
 
-bool lexer_has_more_chars(Lexer* lexer)
+bool lexer_has_more_chars(Lexer *lexer)
 {
 	return lexer->pos < lexer->source_len;
 }
 
-char lexer_char(Lexer* lexer)
+char lexer_char(Lexer *lexer)
 {
 	return lexer->source[lexer->pos];
 }
 
-char* substr(const char* orig, size_t from, size_t to)
+char *substr(const char *orig, size_t from, size_t to)
 {
 	size_t len = to - from;
-	char* sub = malloc(sizeof(char) * (len + 1));
+	char *sub = malloc(sizeof(char) * (len + 1));
 	strncpy(sub, orig + from, len);
 	sub[len] = '\0';
 	return sub;
@@ -126,7 +127,7 @@ bool is_identifier_char(char c)
 	return is_alphanumeric(c) || c == '_';
 }
 
-void lexer_set_token(Lexer* lexer, Token* token)
+void lexer_set_token(Lexer *lexer, Token *token)
 {
 	if (lexer->prev_token != NULL)
 	{
@@ -136,7 +137,7 @@ void lexer_set_token(Lexer* lexer, Token* token)
 	lexer->token = token;
 }
 
-void lexer_scan(Lexer* lexer)
+void lexer_scan(Lexer *lexer)
 {
 	if (lexer->token != NULL && lexer->token->type == TOK_END_OF_FILE)
 	{
@@ -162,7 +163,7 @@ void lexer_scan(Lexer* lexer)
 			lexer->pos++;
 		}
 
-		char* text = substr(lexer->source, start, lexer->pos);
+		char *text = substr(lexer->source, start, lexer->pos);
 		lexer_set_token(lexer, token_create(TOK_NUMBER, text));
 		return;
 	}
@@ -174,7 +175,7 @@ void lexer_scan(Lexer* lexer)
 			lexer->pos++;
 		}
 
-		char* text = substr(lexer->source, start, lexer->pos);
+		char *text = substr(lexer->source, start, lexer->pos);
 		TokenType type;
 		if (strcmp(text, "function") == 0)
 		{
@@ -214,7 +215,7 @@ void lexer_scan(Lexer* lexer)
 		break;
 	default:
 	{
-		char* text = substr(lexer->source, start, lexer->pos);
+		char *text = substr(lexer->source, start, lexer->pos);
 		lexer->token = token_create(TOK_UNKNOWN, text);
 		break;
 	}
@@ -235,7 +236,7 @@ typedef enum
 
 typedef struct
 {
-	const char* text;
+	const char *text;
 } Ident;
 
 typedef struct
@@ -248,7 +249,7 @@ typedef struct Expr_ Expr;
 typedef struct
 {
 	Ident name;
-	Expr* expr;
+	Expr *expr;
 } Assignment;
 
 struct Expr_
@@ -267,7 +268,7 @@ struct Expr_
 	};
 };
 
-Expr expr_ident_create(Location location, const char* text)
+Expr expr_ident_create(Location location, const char *text)
 {
 	Expr expr;
 	expr.type = EXPR_IDENT;
@@ -287,13 +288,13 @@ Expr expr_num_create(Location location, double value)
 	return expr;
 }
 
-Expr expr_assignment_create(Location location, Ident name, Expr* value)
+Expr expr_assignment_create(Location location, Ident name, Expr *value)
 {
 	Assignment assignment = { .expr = value, .name = name };
 	Expr expr = {
-			.type = EXPR_ASSIGNMENT,
-			.location = location,
-			.assignment = assignment,
+		.type = EXPR_ASSIGNMENT,
+		.location = location,
+		.assignment = assignment,
 	};
 	return expr;
 }
@@ -307,7 +308,7 @@ typedef enum
 typedef struct
 {
 	Ident name;
-	Ident* type_name;
+	Ident *type_name;
 	Expr init;
 } Let;
 
@@ -331,7 +332,7 @@ typedef struct
 	};
 } Decl;
 
-Decl decl_let_create(Location location, Ident name, Ident* type_name, Expr init)
+Decl decl_let_create(Location location, Ident name, Ident *type_name, Expr init)
 {
 	Decl decl;
 	decl.type = DECL_LET;
@@ -393,12 +394,12 @@ Stmt stmt_decl_create(Location location, Decl decl)
 
 typedef struct
 {
-	Stmt* statements;
+	Stmt *statements;
 } Module;
 
 typedef struct
 {
-	Lexer* lexer;
+	Lexer *lexer;
 	bool has_errors;
 } Parser;
 
@@ -409,7 +410,7 @@ typedef enum
 	PARSE_RESULT_INVALID_NUMERIC_LITERAL,
 } ParseResult;
 
-char* parse_result_name(ParseResult res)
+char *parse_result_name(ParseResult res)
 {
 	switch (res)
 	{
@@ -430,15 +431,15 @@ char* parse_result_name(ParseResult res)
         if (__res != PARSE_RESULT_OK) return __res; \
     } while (0)
 
-Parser* parser_create(Lexer* lexer)
+Parser *parser_create(Lexer *lexer)
 {
-	Parser* parser = malloc(sizeof(Parser));
+	Parser *parser = malloc(sizeof(Parser));
 	parser->lexer = lexer;
 	parser->has_errors = false;
 	return parser;
 }
 
-void parser_print_error_context(Parser* parser)
+void parser_print_error_context(Parser *parser)
 {
 	size_t pos = parser->lexer->pos;
 
@@ -456,11 +457,11 @@ void parser_print_error_context(Parser* parser)
 		line_end++;
 	}
 
-	char* current_line = substr(parser->lexer->source, line_start, line_end + 1);
+	char *current_line = substr(parser->lexer->source, line_start, line_end + 1);
 	fprintf(stderr, "%s", current_line);
 
 	size_t padding_size = pos - line_start - 1;
-	char* padding = malloc(sizeof(char) * padding_size);
+	char *padding = malloc(sizeof(char) * padding_size);
 	for (size_t i = 0; i < padding_size; i++)
 	{
 		padding[i] = ' ';
@@ -477,7 +478,7 @@ void parser_print_error_context(Parser* parser)
         fprintf(stderr, __VA_ARGS__); \
     } while (0)
 
-bool parser_try_parse_token(Parser* parser, TokenType type)
+bool parser_try_parse_token(Parser *parser, TokenType type)
 {
 	bool ok = parser->lexer->token != NULL && parser->lexer->token->type == type;
 	if (ok)
@@ -487,20 +488,20 @@ bool parser_try_parse_token(Parser* parser, TokenType type)
 	return ok;
 }
 
-ParseResult parser_expect_token(Parser* parser, TokenType type)
+ParseResult parser_expect_token(Parser *parser, TokenType type)
 {
 	bool ok = parser_try_parse_token(parser, type);
 	if (!ok)
 	{
 		PARSER_ERROR("expected a token of type %s, got %s\n",
-				token_type_name(type),
-				token_type_name(parser->lexer->token->type));
+			token_type_name(type),
+			token_type_name(parser->lexer->token->type));
 		return PARSE_RESULT_UNEXPECTED_TOK;
 	}
 	return PARSE_RESULT_OK;
 }
 
-ParseResult parse_identifier_or_literal(Parser* parser, Expr* expr)
+ParseResult parse_identifier_or_literal(Parser *parser, Expr *expr)
 {
 	size_t pos = parser->lexer->pos;
 	Location location = { .pos = pos };
@@ -512,7 +513,7 @@ ParseResult parse_identifier_or_literal(Parser* parser, Expr* expr)
 
 	if (parser_try_parse_token(parser, TOK_NUMBER))
 	{
-		char* end_ptr;
+		char *end_ptr;
 		double value = strtod(parser->lexer->token->text, &end_ptr);
 		if (errno == ERANGE)
 		{
@@ -527,7 +528,7 @@ ParseResult parse_identifier_or_literal(Parser* parser, Expr* expr)
 	return PARSE_RESULT_UNEXPECTED_TOK;
 }
 
-ParseResult parse_expression(Parser* parser, Expr* expr)
+ParseResult parse_expression(Parser *parser, Expr *expr)
 {
 	size_t pos = parser->lexer->pos;
 	Location location = { .pos = pos };
@@ -536,7 +537,7 @@ ParseResult parse_expression(Parser* parser, Expr* expr)
 
 	if (expr->type == EXPR_IDENT && parser_try_parse_token(parser, TOK_EQ))
 	{
-		Expr* value = malloc(sizeof(Expr));
+		Expr *value = malloc(sizeof(Expr));
 		TRY_PARSE(parse_expression(parser, value));
 		*expr = expr_assignment_create(location, expr->ident, value);
 	}
@@ -544,7 +545,7 @@ ParseResult parse_expression(Parser* parser, Expr* expr)
 	return PARSE_RESULT_OK;
 }
 
-ParseResult parse_identifier(Parser* parser, Ident* ident)
+ParseResult parse_identifier(Parser *parser, Ident *ident)
 {
 	Expr expr;
 	TRY_PARSE(parse_identifier_or_literal(parser, &expr));
@@ -558,7 +559,7 @@ ParseResult parse_identifier(Parser* parser, Ident* ident)
 	return PARSE_RESULT_UNEXPECTED_TOK;
 }
 
-ParseResult parse_stmt(Parser* parser, Stmt* stmt)
+ParseResult parse_stmt(Parser *parser, Stmt *stmt)
 {
 	size_t pos = parser->lexer->pos;
 	Location location = { .pos = pos };
@@ -569,7 +570,7 @@ ParseResult parse_stmt(Parser* parser, Stmt* stmt)
 		Ident name;
 		TRY_PARSE(parse_identifier(parser, &name));
 
-		Ident* type_name = NULL;
+		Ident *type_name = NULL;
 		if (parser_try_parse_token(parser, TOK_COLON))
 		{
 			type_name = malloc(sizeof(Ident));
@@ -609,13 +610,13 @@ ParseResult parse_stmt(Parser* parser, Stmt* stmt)
 	return PARSE_RESULT_OK;
 }
 
-void parser_synchronize(Parser* parser)
+void parser_synchronize(Parser *parser)
 {
 	lexer_scan(parser->lexer);
 
 	while (!lexer_has_more_chars(parser->lexer))
 	{
-		Token* prev_token = parser->lexer->prev_token;
+		Token *prev_token = parser->lexer->prev_token;
 		if (prev_token != NULL && prev_token->type == TOK_SEMICOLON)
 		{
 			return;
@@ -636,7 +637,7 @@ void parser_synchronize(Parser* parser)
 	}
 }
 
-ParseResult parser_parse_module(Parser* parser, Module* mod)
+ParseResult parser_parse_module(Parser *parser, Module *mod)
 {
 	lexer_scan(parser->lexer);
 	if (parser_try_parse_token(parser, TOK_END_OF_FILE))
@@ -665,14 +666,14 @@ ParseResult parser_parse_module(Parser* parser, Module* mod)
 	return res;
 }
 
-ParseResult parser_parse(Parser* parser, Module* module)
+ParseResult parser_parse(Parser *parser, Module *module)
 {
 	return parser_parse_module(parser, module);
 }
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
-	const char* source;
+	const char *source;
 	if (argc > 1)
 	{
 		source = argv[1];
@@ -680,14 +681,14 @@ int main(int argc, char** argv)
 	else
 	{
 		source = "let a = 1;\n"
-				 "let b: number = 2;\n"
-				 "type t = number;\n"
-				 "let c: t = a = b = d;";
+			 "let b: number = 2;\n"
+			 "type t = number;\n"
+			 "let c: t = a = b = d;";
 	}
 
-	Parser* parser = parser_create(lexer_create(source));
+	Parser *parser = parser_create(lexer_create(source));
 
-	Module mod = {.statements = NULL};
+	Module mod = { .statements = NULL };
 	ParseResult res = parser_parse(parser, &mod);
 
 	if (res != PARSE_RESULT_OK)
