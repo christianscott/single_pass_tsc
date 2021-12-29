@@ -139,7 +139,7 @@ void lexer_set_token(Lexer *lexer, Token *token)
 	lexer->token = token;
 }
 
-#define STRNCMP(s1, s2) strncmp(s1, s2, sizeof(s2) - 1) == 0
+#define STRNCMP(s1, s2) (strncmp(s1, s2, sizeof(s2) - 1) == 0)
 
 void lexer_scan(Lexer *lexer)
 {
@@ -234,6 +234,14 @@ typedef struct
 {
 	size_t pos;
 } Location;
+
+typedef struct
+{
+	int id;
+} Type;
+
+const Type TYPE_NUMBER = (const Type){ .id = 0 };
+const Type TYPE_BOOL = (const Type){ .id = 1 };
 
 typedef enum
 {
@@ -354,6 +362,8 @@ typedef struct
 		TypeAlias type_alias;
 	};
 } Decl;
+
+bool expr_infer_type(Expr expr, Scope *scope, Type *ty);
 
 Decl decl_let_create(Location location, Ident name, Ident *type_name, Expr init)
 {
@@ -546,6 +556,33 @@ bool scope_is_declared(Scope *s, const char *name)
 	return scope_get_value(s, name, &dummy);
 }
 
+bool expr_infer_type(Expr expr, Scope *scope, Type *ty)
+{
+	switch (expr.kind)
+	{
+	case EXPR_IDENT:
+	{
+		Decl decl;
+		bool ok = scope_get_value(scope, expr.ident.text, &decl);
+		ok = ok && decl.kind == DECL_LET;
+		if (ok)
+		{
+			return expr_infer_type(decl.let.init, scope, ty);
+		}
+		return ok;
+	}
+	case EXPR_ASSIGNMENT:
+		return expr_infer_type(*expr.assignment.expr, scope, ty);
+	case EXPR_NUM:
+		*ty = TYPE_NUMBER;
+		return true;
+	case EXPR_BOOL:
+		*ty = TYPE_BOOL;
+		return true;
+	}
+}
+
+
 typedef struct
 {
 	Stmt *statements;
@@ -565,6 +602,8 @@ typedef enum
 	PARSE_RESULT_INVALID_NUMERIC_LITERAL,
 	PARSE_RESULT_CANNOT_REDECLARE,
 	PARSE_RESULT_UNDECLARED,
+	PARSE_RESULT_COULD_NOT_INFER_EXPR_TYPE,
+	PARSE_RESULT_X,
 } ParseResult;
 
 char *parse_result_name(ParseResult res)
@@ -600,6 +639,12 @@ Parser *parser_create(Lexer *lexer)
 
 	parser->scope = malloc(sizeof(Scope));
 	scope_init(parser->scope, NULL);
+
+	Decl number_decl = decl_type_alias_create((Location){ 0 }, (Ident){ .text = "number" },
+		(Ident){ .text = "number" });
+	scope_declare(parser->scope, "number", number_decl);
+	Decl boolean_decl = decl_type_alias_create((Location){ 0 }, (Ident){ .text = "boolean" }, (Ident){ .text = "boolean" });
+	scope_declare(parser->scope, "boolean", boolean_decl);
 
 	return parser;
 }
@@ -760,7 +805,11 @@ ParseResult parse_stmt(Parser *parser, Stmt *stmt)
 			type_name = malloc(sizeof(Ident));
 			TRY_PARSE(parse_identifier(parser, type_name));
 
-			if (!scope_is_declared(parser->scope, type_name->text))
+			if (!(
+				STRNCMP(type_name->text, "number") ||
+				STRNCMP(type_name->text, "boolean") ||
+				scope_is_declared(parser->scope, type_name->text)
+			))
 			{
 				PARSER_ERROR("cannot reference type '%s' before declaration\n", type_name->text);
 				return PARSE_RESULT_UNDECLARED;
@@ -771,6 +820,53 @@ ParseResult parse_stmt(Parser *parser, Stmt *stmt)
 
 		Expr init;
 		TRY_PARSE(parse_expression(parser, &init));
+
+		if (type_name != NULL)
+		{
+			// if the decl includes a kind, check that the kind of the expr matches the stated kind
+			Type expr_ty;
+			bool ok = expr_infer_type(init, parser->scope, &expr_ty);
+			if (!ok)
+			{
+				PARSER_ERROR("could not infer type of expression\n");
+				return PARSE_RESULT_COULD_NOT_INFER_EXPR_TYPE;
+			}
+
+			Decl type_name_decl;
+			ok = scope_get_value(parser->scope, type_name->text, &type_name_decl);
+			if (!ok)
+			{
+				PARSER_ERROR("cannot reference type '%s' before declaration\n", type_name->text);
+				return PARSE_RESULT_UNDECLARED;
+			}
+			if (type_name_decl.kind != DECL_TYPE_ALIAS)
+			{
+				PARSER_ERROR("omg what have you done\n");
+				return PARSE_RESULT_X;
+			}
+
+			Type named_ty;
+			const char *type_name_s = type_name_decl.type_alias.type_name.text;
+			if (STRNCMP(type_name_s, "number"))
+			{
+				named_ty = TYPE_NUMBER;
+			}
+			else if (STRNCMP(type_name_s, "boolean"))
+			{
+				named_ty = TYPE_BOOL;
+			}
+			else
+			{
+				return PARSE_RESULT_UNDECLARED; // todo: do something else
+			}
+
+			if (expr_ty.id != named_ty.id)
+			{
+				PARSER_ERROR("type mismatch\n");
+				return PARSE_RESULT_UNEXPECTED_TOK;
+			}
+		}
+
 		Decl decl = decl_let_create(location, name, type_name, init);
 		*stmt = stmt_decl_create(location, decl);
 
@@ -884,10 +980,9 @@ int main(int argc, char **argv)
 	}
 	else
 	{
-		source = "let a = 1;\n"
-			 "let c = 2;\n"
-			 "type t = number;\n"
-			 "let b: t = c = false;\n";
+		source = "let a: boolean = false;\n"
+		         "let b: number = 1;\n"
+		         "let c: boolean = b;\n";
 	}
 
 	Parser *parser = parser_create(lexer_create(source));
