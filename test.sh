@@ -44,7 +44,7 @@ main() {
     local want_stderr="./fixtures/$name.stderr"
     local got_stderr="$tmpdir/$name.stderr"
 
-    "$bin" "$input" > >(tee "$got_stdout") 2> >(tee "$got_stderr" >&2) || has_errs='true'
+    "$bin" "$input" > >(tee "$got_stdout") 2> >(tee "$got_stderr" >&2) || true # swallow errors
     git diff --no-index "$want_stdout" "$got_stdout" || has_errs='true'
     git diff --no-index "$want_stderr" "$got_stderr" || has_errs='true'
 

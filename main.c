@@ -240,8 +240,8 @@ typedef struct
 	int id;
 } Type;
 
-const Type TYPE_NUMBER = (const Type){ .id = 0 };
-const Type TYPE_BOOL = (const Type){ .id = 1 };
+const Type TYPE_NUMBER = (Type){ .id = 0 };
+const Type TYPE_BOOL = (Type){ .id = 1 };
 
 typedef enum
 {
@@ -579,6 +579,8 @@ bool expr_infer_type(Expr expr, Scope *scope, Type *ty)
 	case EXPR_BOOL:
 		*ty = TYPE_BOOL;
 		return true;
+	default:
+		UNREACHABLE("unexpected expr of kind '%d'\n", expr.kind);
 	}
 }
 
@@ -643,7 +645,8 @@ Parser *parser_create(Lexer *lexer)
 	Decl number_decl = decl_type_alias_create((Location){ 0 }, (Ident){ .text = "number" },
 		(Ident){ .text = "number" });
 	scope_declare(parser->scope, "number", number_decl);
-	Decl boolean_decl = decl_type_alias_create((Location){ 0 }, (Ident){ .text = "boolean" }, (Ident){ .text = "boolean" });
+	Decl boolean_decl = decl_type_alias_create((Location){ 0 }, (Ident){ .text = "boolean" },
+		(Ident){ .text = "boolean" });
 	scope_declare(parser->scope, "boolean", boolean_decl);
 
 	return parser;
@@ -971,18 +974,41 @@ ParseResult parser_parse(Parser *parser, Module *module)
 	return parser_parse_module(parser, module);
 }
 
+int read_file_to_string(const char *filename, char **str)
+{
+	long length;
+	FILE *f = fopen(filename, "rb");
+	if (f)
+	{
+		fseek(f, 0, SEEK_END);
+		length = ftell(f);
+		fseek(f, 0, SEEK_SET);
+		*str = malloc(length);
+		if (*str)
+		{
+			fread(*str, 1, length, f);
+		}
+		else
+		{
+			return 1;
+		}
+		fclose(f);
+	}
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
-	const char *source;
+	char *source;
 	if (argc > 1)
 	{
-		source = argv[1];
+		read_file_to_string(argv[1], &source);
 	}
 	else
 	{
 		source = "let a: boolean = false;\n"
-		         "let b: number = 1;\n"
-		         "let c: boolean = b;\n";
+			 "let b: number = 1;\n"
+			 "let c: boolean = b;\n";
 	}
 
 	Parser *parser = parser_create(lexer_create(source));
@@ -992,7 +1018,7 @@ int main(int argc, char **argv)
 
 	if (res != PARSE_RESULT_OK)
 	{
-		printf("failed to parse: %s\n", parse_result_name(res));
+		fprintf(stderr, "failed to parse: %s\n", parse_result_name(res));
 		return 1;
 	}
 

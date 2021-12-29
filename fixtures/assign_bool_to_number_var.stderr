@@ -1,2 +1,3 @@
 let b: number = a;
                  ^ type mismatch
+failed to parse: PARSE_RESULT_UNEXPECTED_TOK
