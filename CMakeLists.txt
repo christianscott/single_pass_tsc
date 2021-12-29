@@ -4,4 +4,5 @@ project(single_pass_tsc C)
 set(CMAKE_C_STANDARD 11)
 add_compile_options(-Wall -Wextra -pedantic -Werror)
 
+set(EXECUTABLE_OUTPUT_PATH "bin")
 add_executable(single_pass_tsc main.c vendor/stretchy_buffer.h)
